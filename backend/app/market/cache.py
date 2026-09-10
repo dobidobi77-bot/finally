@@ -57,9 +57,15 @@ class PriceCache:
         return update.price if update else None
 
     def remove(self, ticker: str) -> None:
-        """Remove a ticker from the cache (e.g., when removed from watchlist)."""
+        """Remove a ticker from the cache (e.g., when removed from watchlist).
+
+        Bumps the version counter only if the ticker was actually present, so
+        SSE consumers watching `version` observe the removal.
+        """
         with self._lock:
-            self._prices.pop(ticker, None)
+            removed = self._prices.pop(ticker, None)
+            if removed is not None:
+                self._version += 1
 
     @property
     def version(self) -> int:
