@@ -34,6 +34,27 @@ uv run market_data_demo.py
 uv run pytest
 ```
 
+## Running with Docker
+
+Requires Docker Desktop (or Docker Engine with the compose plugin). Copy `.env.example` to `.env` and add your `OPENROUTER_API_KEY`, then use the scripts in `scripts/`. Each has a `.sh` (macOS/Linux) and a `.ps1` (Windows PowerShell 5.1+) variant with the same flags.
+
+| Script | What it does |
+| --- | --- |
+| `start` | Build if needed and start the app at http://localhost:8000. `--build` forces a rebuild, `--open` opens a browser once healthy. Safe to run repeatedly. |
+| `stop` | Stop the app. Your portfolio, trades and chat history are kept. |
+| `restart` | Stop and start again, keeping all data, and wait until the app is healthy. |
+| `reset` | Start over: stop the app, delete the database volume, start fresh with $10,000 cash and the default watchlist. Asks for confirmation; `--yes` skips it. Unrecoverable. |
+
+```bash
+scripts/start.sh --build      # first run
+scripts/reset.sh              # wipe the portfolio and start over
+.\scripts\start.ps1 -Build    # Windows (PowerShell also accepts --build)
+```
+
+`restart` and `reset` accept `--test`, which starts the app with the built-in simulator and a mock LLM regardless of the keys in `.env`. The E2E suite uses this; you do not need it for normal use.
+
+The database lives in the Docker volume `finally-data`, not in the `db/` directory. `stop` never removes it; only `reset` does.
+
 ## Market data
 
 Two interchangeable sources sit behind one abstract interface (`MarketDataSource`):

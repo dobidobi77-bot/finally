@@ -15,12 +15,14 @@ from .seed_prices import (
     CORRELATION_GROUPS,
     CROSS_GROUP_CORR,
     DEFAULT_PARAMS,
+    DEFAULT_SEED_PRICE,
     INTRA_FINANCE_CORR,
     INTRA_TECH_CORR,
     SEED_PRICES,
     TICKER_PARAMS,
     TSLA_CORR,
 )
+from .seed_resolver import resolve_seed, resolve_seeds
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +54,11 @@ class GBMSimulator:
         tickers: list[str],
         dt: float = DEFAULT_DT,
         event_probability: float = 0.001,
+        seeds: dict[str, dict[str, float]] | None = None,
     ) -> None:
         self._dt = dt
         self._event_prob = event_probability
+        self._seeds: dict[str, dict[str, float]] = dict(seeds or {})
 
         # Per-ticker state
         self._tickers: list[str] = []
@@ -117,10 +121,12 @@ class GBMSimulator:
 
         return result
 
-    def add_ticker(self, ticker: str) -> None:
+    def add_ticker(self, ticker: str, seed: dict[str, float] | None = None) -> None:
         """Add a ticker to the simulation. Rebuilds the correlation matrix."""
         if ticker in self._prices:
             return
+        if seed is not None:
+            self._seeds[ticker] = seed
         self._add_ticker_internal(ticker)
         self._rebuild_cholesky()
 
@@ -144,12 +150,21 @@ class GBMSimulator:
     # --- Internals ---
 
     def _add_ticker_internal(self, ticker: str) -> None:
-        """Add a ticker without rebuilding Cholesky (for batch initialization)."""
+        """Add a ticker without rebuilding Cholesky (for batch initialization).
+
+        A resolved seed (from the `ticker_seeds` table) wins, then the built-in
+        table, then the fixed default. Never random — see BUILD_CONTRACT A3.
+        """
         if ticker in self._prices:
             return
+        seed = self._seeds.get(ticker)
         self._tickers.append(ticker)
-        self._prices[ticker] = SEED_PRICES.get(ticker, random.uniform(50.0, 300.0))
-        self._params[ticker] = TICKER_PARAMS.get(ticker, dict(DEFAULT_PARAMS))
+        if seed is not None:
+            self._prices[ticker] = seed["seed_price"]
+            self._params[ticker] = {"mu": seed["mu"], "sigma": seed["sigma"]}
+        else:
+            self._prices[ticker] = SEED_PRICES.get(ticker, DEFAULT_SEED_PRICE)
+            self._params[ticker] = TICKER_PARAMS.get(ticker, dict(DEFAULT_PARAMS))
 
     def _rebuild_cholesky(self) -> None:
         """Rebuild the Cholesky decomposition of the ticker correlation matrix.
@@ -220,6 +235,7 @@ class SimulatorDataSource(MarketDataSource):
         self._sim = GBMSimulator(
             tickers=tickers,
             event_probability=self._event_prob,
+            seeds=await resolve_seeds(tickers),
         )
         # Seed the cache with initial prices so SSE has data immediately
         for ticker in tickers:
@@ -241,7 +257,7 @@ class SimulatorDataSource(MarketDataSource):
 
     async def add_ticker(self, ticker: str) -> None:
         if self._sim:
-            self._sim.add_ticker(ticker)
+            self._sim.add_ticker(ticker, seed=await resolve_seed(ticker))
             # Seed cache immediately so the ticker has a price right away
             price = self._sim.get_price(ticker)
             if price is not None:

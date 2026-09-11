@@ -4,14 +4,71 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from massive import RESTClient
-from massive.rest.models import SnapshotMarketType
 
 from .cache import PriceCache
 from .interface import MarketDataSource
 
 logger = logging.getLogger(__name__)
+
+# The library's own SnapshotMarketType enum is not a str-enum, so passing it
+# renders "SnapshotMarketType.STOCKS" into the URL and every poll 404s
+# (massive 2.2.0). The plain string is what the endpoint path needs.
+SNAPSHOT_MARKET_TYPE = "stocks"
+
+
+def _bar_value(snap, bar: str, field: str) -> float | None:
+    """Read `snap.<bar>.<field>` and return it only if it is a positive number."""
+    value = getattr(getattr(snap, bar, None), field, None)
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        return float(value)
+    return None
+
+
+def _ms_to_seconds(ms: float | None) -> float:
+    """Massive bar timestamps are Unix milliseconds; fall back to now."""
+    return ms / 1000.0 if ms else time.time()
+
+
+def resolve_price(snap) -> tuple[float, float] | None:
+    """Pick the freshest (price, timestamp_seconds) a snapshot carries.
+
+    `last_trade` needs a trades entitlement that the free/Starter plans lack
+    (the API answers NOT_AUTHORIZED), so it is None at every hour there.
+    The aggregate bars are always present, so fall through them: latest
+    minute bar, then today's day bar, then the prior session's close.
+    """
+    for bar, price_field, ts_field in (
+        ("last_trade", "price", "timestamp"),
+        ("min", "close", "timestamp"),
+    ):
+        price = _bar_value(snap, bar, price_field)
+        if price is not None:
+            return price, _ms_to_seconds(_bar_value(snap, bar, ts_field))
+
+    price = _bar_value(snap, "day", "close") or _bar_value(snap, "prev_day", "close")
+    if price is None:
+        return None
+    updated_ns = getattr(snap, "updated", None)  # snapshot-level, nanoseconds
+    if isinstance(updated_ns, (int, float)) and updated_ns > 0:
+        return price, updated_ns / 1e9
+    return price, time.time()
+
+
+def resolve_open_price(snap) -> float | None:
+    """Session baseline for daily change % (BUILD_CONTRACT A1).
+
+    Massive clears snapshot data at 12am ET and repopulates it from the first
+    trade of the new session (as early as 4am ET pre-market), per the
+    RESTClient.get_snapshot_all docstring. So between midnight and the first
+    trade `day` is all zeros and the prior close is the only sane baseline;
+    once trading starts `day.open` is this session's first print. Outside
+    hours `day` is the most recent completed session, so the change % shown
+    is that session's move.
+    """
+    return _bar_value(snap, "day", "open") or _bar_value(snap, "prev_day", "close")
 
 
 class MassiveDataSource(MarketDataSource):
@@ -97,22 +154,17 @@ class MassiveDataSource(MarketDataSource):
             snapshots = await asyncio.to_thread(self._fetch_snapshots)
             processed = 0
             for snap in snapshots:
-                try:
-                    price = snap.last_trade.price
-                    # Massive timestamps are Unix milliseconds → convert to seconds
-                    timestamp = snap.last_trade.timestamp / 1000.0
-                    self._cache.update(
-                        ticker=snap.ticker,
-                        price=price,
-                        timestamp=timestamp,
-                    )
-                    processed += 1
-                except (AttributeError, TypeError) as e:
-                    logger.warning(
-                        "Skipping snapshot for %s: %s",
-                        getattr(snap, "ticker", "???"),
-                        e,
-                    )
+                ticker = getattr(snap, "ticker", None)
+                resolved = resolve_price(snap)
+                if not ticker or resolved is None:
+                    logger.warning("Skipping snapshot for %s: no price in payload", ticker or "???")
+                    continue
+                price, timestamp = resolved
+                self._cache.update(ticker=ticker, price=price, timestamp=timestamp)
+                open_price = resolve_open_price(snap)
+                if open_price is not None:
+                    self._cache.set_open_price(ticker, open_price)
+                processed += 1
             logger.debug("Massive poll: updated %d/%d tickers", processed, len(self._tickers))
 
         except Exception as e:
@@ -123,6 +175,6 @@ class MassiveDataSource(MarketDataSource):
     def _fetch_snapshots(self) -> list:
         """Synchronous call to the Massive REST API. Runs in a thread."""
         return self._client.get_snapshot_all(
-            market_type=SnapshotMarketType.STOCKS,
+            market_type=SNAPSHOT_MARKET_TYPE,
             tickers=self._tickers,
         )

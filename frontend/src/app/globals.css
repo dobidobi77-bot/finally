@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+/*
+  FinAlly terminal tokens.
+
+  Colour is information, never decoration:
+    accent  - where you are looking right now (selected ticker, command caret)
+    blue    - the instrument itself (chart strokes, focus rings, links)
+    purple  - submit
+    up/down - direction of money
+  Everything else is graphite.
+*/
+@theme {
+  --color-void: #0a0d13;
+  --color-ground: #0d1117;
+  --color-panel: #11161f;
+  --color-raised: #161c27;
+  --color-edge: #1d2530;
+  --color-edge-bright: #2b3542;
+
+  --color-ink: #dbe3ee;
+  --color-ink-mid: #97a3b4;
+  --color-ink-dim: #647082;
+
+  --color-accent: #ecad0a;
+  --color-blue: #209dd7;
+  --color-purple: #753991;
+
+  --color-up: #26a69a;
+  --color-down: #ef5350;
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-none: 0px;
+  --radius-xs: 2px;
+}
+
+:root {
+  --flash-up: rgba(38, 166, 154, 0.25);
+  --flash-down: rgba(239, 83, 80, 0.25);
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Every figure in the terminal is monospaced and tabular so digits never
+   shift sideways as prices tick. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Panel titles: condensed, sentence case, quiet. */
+.panel-title {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--color-ink-dim);
+}
+
+/* Table column heads are the one place small caps genuinely reads as data. */
+.col-head {
+  font-family: var(--font-cond);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-dim);
+  font-weight: 500;
+}
+
+@keyframes flash-up {
+  from {
+    background-color: var(--flash-up);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@keyframes flash-down {
+  from {
+    background-color: var(--flash-down);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.flash-up {
+  animation: flash-up 500ms ease-out;
+}
+
+.flash-down {
+  animation: flash-down 500ms ease-out;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.pulse-dot {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash-up,
+  .flash-down,
+  .pulse-dot {
+    animation: none;
+  }
+}
+
+/* Scrollbars belong to the instrument, not the OS. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge-bright) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-edge-bright);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input,
+button,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+input:focus-visible,
+button:focus-visible,
+textarea:focus-visible {
+  outline: 1px solid var(--color-blue);
+  outline-offset: -1px;
+}
+
+/* Desktop-first: the terminal is a fixed instrument panel on wide screens and
+   a single scrolling column on narrow ones. */
+@media (max-width: 1023px) {
+  body {
+    overflow: auto;
+  }
+}

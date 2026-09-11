@@ -1,0 +1,10 @@
+# Test-mode override (INTERFACES.md 6.2). Layer it on top of the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml up -d
+# Compose `environment:` beats `env_file:`, so this forces the simulator and
+# the mock LLM without touching the user's .env. Nothing else belongs here -
+# Playwright runs on the host (BUILD_CONTRACT C2).
+services:
+  finally:
+    environment:
+      MASSIVE_API_KEY: ""
+      LLM_MOCK: "true"

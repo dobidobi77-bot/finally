@@ -1,0 +1,52 @@
+# Secrets - never bake these into an image layer
+.env
+.env.*
+!.env.example
+
+# Version control and CI
+.git
+.gitignore
+.github
+
+# Node / frontend build artifacts
+node_modules
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/.turbo
+npm-debug.log*
+yarn-error.log*
+
+# Python
+.venv
+backend/.venv
+__pycache__
+**/__pycache__
+*.py[cod]
+.pytest_cache
+backend/.pytest_cache
+.coverage
+backend/.coverage
+htmlcov
+.ruff_cache
+*.egg-info
+
+# Runtime database - in Docker it lives in the finally-data named volume
+db/*.db
+db/*.db-wal
+db/*.db-shm
+db/*.db-journal
+
+# Not needed at runtime
+test
+planning
+scripts
+docker-compose.yml
+docker-compose.test.yml
+Dockerfile
+.dockerignore
+README.md
+LICENSE
+debug.log
+.claude
+.DS_Store

@@ -1,0 +1,46 @@
+# FinAlly - single container, single port.
+# Start with: docker compose up -d --build   (or scripts/start.sh --build)
+services:
+  finally:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: finally:latest
+    container_name: finally
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # The database lives on the volume below so it survives a rebuild.
+      DB_PATH: /app/db/finally.db
+    volumes:
+      # Named volume, NOT a bind mount to ./db. SQLite runs in WAL mode, which
+      # mmaps a -shm sidecar file; Docker Desktop's Windows bind-mount bridge
+      # cannot support that mapping, so a second start fails with
+      # "sqlite3.OperationalError: disk I/O error" and leaves the -wal/-shm
+      # files permanently locked on the host. A named volume is ext4 inside the
+      # Docker VM, where WAL works.
+      #
+      # To inspect the database:
+      #   docker compose exec finally sqlite3 /app/db/finally.db
+      # To copy it to the host:
+      #   docker compose cp finally:/app/db/finally.db ./db/finally.db
+      - finally-data:/app/db
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import urllib.request, json, sys
+          with urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=3) as r:
+              sys.exit(0 if json.load(r).get("status") == "ok" else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  finally-data:

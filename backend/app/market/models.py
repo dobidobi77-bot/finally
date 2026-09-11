@@ -8,12 +8,23 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, slots=True)
 class PriceUpdate:
-    """Immutable snapshot of a single ticker's price at a point in time."""
+    """Immutable snapshot of a single ticker's price at a point in time.
+
+    `previous_price` is the price one tick ago and drives the flash animation.
+    `open_price` is the session baseline set when the ticker was first tracked
+    and drives the daily change % (BUILD_CONTRACT A1). When omitted it defaults
+    to `price`, which is correct for a ticker's very first update.
+    """
 
     ticker: str
     price: float
     previous_price: float
+    open_price: float | None = None
     timestamp: float = field(default_factory=time.time)  # Unix seconds
+
+    def __post_init__(self) -> None:
+        if self.open_price is None:
+            object.__setattr__(self, "open_price", self.price)
 
     @property
     def change(self) -> float:
@@ -42,6 +53,7 @@ class PriceUpdate:
             "ticker": self.ticker,
             "price": self.price,
             "previous_price": self.previous_price,
+            "open_price": self.open_price,
             "timestamp": self.timestamp,
             "change": self.change,
             "change_percent": self.change_percent,

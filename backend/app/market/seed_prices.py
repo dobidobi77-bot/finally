@@ -45,3 +45,8 @@ INTRA_TECH_CORR = 0.6  # Tech stocks move together
 INTRA_FINANCE_CORR = 0.5  # Finance stocks move together
 CROSS_GROUP_CORR = 0.3  # Between sectors / unknown tickers
 TSLA_CORR = 0.3  # TSLA does its own thing
+
+# Seed price for an accepted symbol with no entry above (BUILD_CONTRACT A3).
+# A fixed value, not a random one: a random seed reprices the ticker on every
+# restart and revalues any open position at a different number.
+DEFAULT_SEED_PRICE = 100.00
